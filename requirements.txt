@@ -1,0 +1,16 @@
+pandas
+numpy
+pandas-ta
+backtrader
+SQLAlchemy
+scikit-learn
+matplotlib
+plotly
+mplfinance
+PyQt6
+playwright
+torch
+shioaji
+python-dotenv
+FinMind
+yfinance

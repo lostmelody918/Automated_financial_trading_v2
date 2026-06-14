@@ -1,0 +1,110 @@
+以下是該目錄內各個模組的詳細介紹、功能說明以及使用方式：
+
+  ---
+
+  📂 目錄與核心模組解析
+
+  1. core/ (核心運算與調度模組)
+  這是整個回測系統的心臟，負責數學運算與模擬流程的推進。
+   * simulator.py (主調度器)：
+       * 功能：整個復盤系統的進入點。它會鎖定時間區間（08:45 -
+         13:45），自動找出當天交易量前 3 大的 Call 與 Put
+         合約。接著它會從資料庫撈取 Tick
+         資料，並將資料餵給底層引擎進行毫秒/秒級的模擬與
+         MTM（Mark-to-Market，即時損益）計算。
+       * 容錯設計：如果找不到資料庫，會自動生成亂數 Mock Data；如果找不到
+         C++ 模組，會自動切換為 Python 降級版本。
+   * bs_vectorized.py (向量化 BS 模型)：
+       * 功能：不使用傳統的 for 迴圈算選擇權價格，而是利用 NumPy
+         矩陣運算（Vectorization）。可以一次性對成千上萬筆不同履約價、到
+         期日的資料算出理論價、Delta、Gamma、Theta、Vega
+         與隱含波動率（IV）。
+   * pnl_attribution.py (希臘字母 PnL 歸因引擎)：
+       * 功能：解決「賺的錢是從哪來的」這個問題。採用梯形法則（Trapezoida         l Rule）來做積分（取 t 與 $t-1$
+         的希臘字母平均值），取代誤差較大的歐拉法。如果「無法解釋的殘差（
+         Residual）」超過總權利金的 5%，會觸發 Event Flag 警告。
+   * options_replay_fallback.py (Python 降級回放引擎)：
+       * 功能：當 C++ 尚未編譯完成時，系統會自動使用這支純 Python
+         寫的備用 Order Book 狀態機，確保開發與測試不會中斷。
+
+  2. cpp_engine/ (高效能 C++ 引擎)
+   * src/orderbook_replay.cpp & bindings.cpp：
+       * 功能：利用 C++ 實作的極速委託簿（Order
+         Book）狀態機。負責記錄每一次 Tick 發生時的最佳買賣價（Best
+         Bid/Ask），並計算損益。透過 pybind11 綁定，Python 可以像呼叫一般
+         Python Class 一樣呼叫它，但享有 C++ 的執行速度。
+
+  3. database/ (資料庫介接)
+   * timescale_client.py (TimescaleDB 客戶端)：
+       * 功能：專門連接 PostgreSQL + TimescaleDB 擴充套件。它包含
+         initialize_schema
+         來建立支援時間序列分區的超表（Hypertable），並使用
+         execute_values 實現極速的 Tick 資料批量寫入（Bulk Insert）。
+
+  4. workflows/ (自動化管線)
+   * daily_pipeline.py (Prefect 工作流)：
+       * 功能：負責「資料工程」。這是一支 Prefect
+         Flow，定義了每天盤後（如 14:00）要執行的自動化任務：從 Shioaji
+         抓資料 → 清洗與缺失值補補齊（Forward Fill） → 運算 IV 曲面 →
+         存入 TimescaleDB。
+
+  5. reports/ (報表產出模組)
+   * reporter.py (智慧報表生成器)：
+       * 功能：復盤結束後的總結。它會產出三個東西：
+           1. llm_report.md：專給 AI 看的單欄位 Markdown
+              報告，去除雜訊，只保留 KPI（總損益、滑價、最大回撤）。
+           2. attribution_data.parquet：把龐大的明細資料打包成 Parquet
+              檔，供 AI Code Interpreter 分析，避免文字超載。
+           3. pnl_chart.json：前端視覺化圖表
+
+  🚀 如何使用這套系統？
+
+  使用流程分為「資料準備」與「執行復盤」兩階段。請確保您已在終端機啟動虛
+  擬環境（venv 或 fin_ai_312）。
+
+  步驟 1：啟動資料庫與抓取資料 (Data Pipeline)
+  在真實環境中，您需要啟動本地的 PostgreSQL (需安裝 TimescaleDB)。
+  設定環境變數（如果密碼與預設不同）：
+
+   1 set
+     DATABASE_URL="postgresql://postgres:postgres@localhost:5432/finance_db"
+  接著手動執行每日資料管線，抓取並清洗資料：
+
+   1 python
+     ai_short_term_day_trading/options_backtester/workflows/daily_pipelin     e.py
+  (註：目前程式內設計了容錯與 Mock
+  機制，如果沒有資料庫，它會顯示錯誤但不會崩潰)。
+
+  步驟 2：執行日內高頻復盤 (Simulation)
+  確認資料準備好後，啟動主復盤模擬器：
+
+   1 python
+     ai_short_term_day_trading/options_backtester/core/simulator.py
+  它會做什麼？
+   1. 抓出 2026-06-10 當天交易量最大的 6 檔選擇權。
+   2. 從 08:45 開始，以 Tick by Tick 的方式重播當天的委託簿狀態。
+   3. 印出定期的 MTM（Mark-to-Market）價值變化。
+
+  步驟 3：產出並檢視報告 (Reporting)
+  如果需要驗證 PnL 歸因引擎與報表產出：
+
+   1 python
+     ai_short_term_day_trading/options_backtester/reports/reporter.py
+  執行後，請到
+  ai_short_term_day_trading/options_backtester/reports_output/
+  目錄下，您會看到生成的 .md 報告與 .json 檔。
+
+  (可選進階) 步驟 4：編譯 C++ 極速引擎
+  目前系統使用的是 Python 降級版本。當您準備好進行幾千萬筆 Tick
+  的正式回測時，可以編譯 C++ 引擎：
+   1. 確保您的 Windows 裝有 Visual Studio C++ 建置工具 (或 MinGW / gcc)。
+   2. 執行編譯指令：
+
+   1 cd ai_short_term_day_trading/options_backtester/cpp_engine
+   2 mkdir build
+   3 cd build
+   4 cmake
+     -DPYTHON_EXECUTABLE="F:\Gemini_CLI_Application\finance_v2\venv\Scrip     ts\python.exe" ..
+   5 cmake --build . --config Release
+  編譯成功後，會產生一個 .pyd 檔案，simulator.py
+  下次執行時就會自動抓取這個 C++ 模組，大幅提升回放速度。

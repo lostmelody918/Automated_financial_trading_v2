@@ -1,0 +1,30 @@
+=== 虧損交易分析報告 (Loss Analysis Report) ===
+總交易次數: 3
+獲利次數: 1, 虧損次數: 2
+勝率: 33.33%
+
+--- 各時段虧損分佈 (Losses by Hour) ---
+Hour 8: Losses = 0, Wins = 0
+Hour 9: Losses = 0, Wins = 0
+Hour 10: Losses = 0, Wins = 0
+Hour 11: Losses = 0, Wins = 1
+Hour 12: Losses = 0, Wins = 0
+Hour 13: Losses = 1, Wins = 0
+Hour 14: Losses = 0, Wins = 0
+
+--- 特徵平均值比較 (Feature Averages: Win vs Loss) ---
+atr          -> Win:   5.7143 | Loss:   2.2143
+macd_hist    -> Win:  -1.7173 | Loss:   0.7329
+rsi          -> Win:  50.7463 | Loss:  53.0000
+vwap_bias    -> Win:  -0.0111 | Loss:  -0.3614
+vix_ret_1d   -> Win:   0.0000 | Loss:   0.0000
+prob_up      -> Win:   0.0015 | Loss:   0.9116
+prob_down    -> Win:   0.8359 | Loss:   0.0008
+
+--- 虧損交易的極端值 (Extreme Values in Losses) ---
+1. 高波動 (High ATR) 導致虧損比例:
+   大於中位數 ATR 的虧損筆數: 1 / 2
+2. VIX 暴增 (VIX Spike) 導致虧損:
+   VIX 單日暴增 > 5% 的虧損筆數: 0 / 2
+3. 逆勢交易 (Counter-Trend MACD) 導致虧損:
+   逆勢 (多單但MACD<0 或 空單但MACD>0): 0 / 2

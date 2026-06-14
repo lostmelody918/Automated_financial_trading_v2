@@ -1,0 +1,1 @@
+-IF:/Gemini_CLI_Application/finance_v2/ai_short_term_day_trading/options_backtester/cpp_engine/src -isystem "D:/Pyenv_win/pyenv-win-master/pyenv-win/versions/3.13.1/Include" -isystem "F:/Gemini_CLI_Application/finance_v2/venv/Lib/site-packages/pybind11/include"

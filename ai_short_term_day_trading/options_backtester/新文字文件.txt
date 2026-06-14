@@ -1,0 +1,1 @@
+streamlit run F:\Gemini_CLI_Application\finance_v2\ai_short_term_day_trading\options_backtester\ui_dashboard.py

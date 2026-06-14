@@ -1,0 +1,32 @@
+[
+    {
+        "date": "2026-05-27",
+        "pc_ratio": 1.1519,
+        "foreign_net_oi": 33291,
+        "dealer_net_oi": 3260
+    },
+    {
+        "date": "2026-05-28",
+        "pc_ratio": 1.1494,
+        "foreign_net_oi": 33583,
+        "dealer_net_oi": 3368
+    },
+    {
+        "date": "2026-05-29",
+        "pc_ratio": 0.9065000000000001,
+        "foreign_net_oi": 31788,
+        "dealer_net_oi": 3464
+    },
+    {
+        "date": "2026-05-30",
+        "pc_ratio": 0.9595999999999999,
+        "foreign_net_oi": 32711,
+        "dealer_net_oi": 3843
+    },
+    {
+        "date": "2026-05-31",
+        "pc_ratio": 1.0107,
+        "foreign_net_oi": 36210,
+        "dealer_net_oi": 4470
+    }
+]
