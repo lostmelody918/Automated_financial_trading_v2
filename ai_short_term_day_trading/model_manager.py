@@ -37,7 +37,12 @@ class TradingModelManager:
                 "model_class": type(model).__name__
             },
             "hyperparameters": hyperparameters,
-            "performance": metrics
+            "performance": metrics,
+            "causal_metrics": metrics.get("causal", {
+                "ATE_estimation": None,
+                "factual_loss": None,
+                "counterfactual_variance": None
+            })
         }
 
         try:

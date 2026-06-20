@@ -1,4 +1,9 @@
 import os
+import sys
+
+# 強制控制台使用 UTF-8 輸出，防止 Emoji 造成 Windows CMD 崩潰
+sys.stdout.reconfigure(encoding='utf-8')
+
 import pandas as pd
 import numpy as np
 import requests
@@ -46,26 +51,126 @@ class DayTradingDataEngine:
         print(f"📡 [DATA] 正在抓取數據範圍: {fetch_start_date} 至 {end_date} (含緩衝期)")
 
         try:
-            # 1. 強制重新整理合約清單，防止合約轉倉導致數據舊化
-
+            print("[DEBUG] Step 1: Getting contract")
             contract = self.api.Contracts.Futures.TXF.TXFR1
-            # 檢測合約是否成功讀取
             if contract is None:
                 print("❌ 無法獲取近月合約 TXFR1，請檢查 Shioaji 登入狀態")
                 return pd.DataFrame()
 
-            # 2. 下載 K 線
-            kbars = self.api.kbars(contract, start=fetch_start_date, end=end_date)
-            df = pd.DataFrame({**kbars})
+            print("[DEBUG] Step 2: Checking cache file path")
+            cache_file = os.path.join(os.path.dirname(__file__), "market_data_cache_v3.parquet")
+            df_cache = pd.DataFrame()
+            last_date = None
+            first_date = None
 
-            if df.empty:
+            if os.path.exists(cache_file):
+                print("[DEBUG] Step 3: Cache file exists, reading parquet")
+                try:
+                    df_cache = pd.read_parquet(cache_file)
+                    print(f"[DEBUG] Step 4: Parquet read successful, shape: {df_cache.shape}")
+                    if not df_cache.empty:
+                        if 'date' in df_cache.columns:
+                            df_cache.rename(columns={'date': 'ts', 'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume', 'Amount': 'amount'}, inplace=True)
+                        print("[DEBUG] Step 5: Renamed columns")
+                        df_cache['ts'] = pd.to_datetime(df_cache['ts'])
+                        print("[DEBUG] Step 6: Converted ts to datetime")
+                        last_date = df_cache['ts'].max()
+                        first_date = df_cache['ts'].min()
+                        print(f"📦 載入本地行情快取，日期範圍: {first_date.date()} ~ {last_date.date()} ({len(df_cache)} 筆)")
+                except Exception as e:
+                    print(f"⚠️ 快取讀取失敗: {e}")
+
+            print("[DEBUG] Step 7: Converting target_start and end_dt")
+            target_start = pd.to_datetime(fetch_start_date)
+            end_dt = pd.to_datetime(end_date)
+            
+            print("[DEBUG] Step 8: Computing needs_future and needs_past")
+            needs_future = not last_date or last_date.date() < today.date()
+            needs_past = not first_date or first_date > target_start
+            
+            print(f"[DEBUG] needs_future: {needs_future}, needs_past: {needs_past}")
+            if not needs_future and not needs_past:
+                print("✅ 數據已充足且是最新，無需抓取。")
+                all_frames = [df_cache]
+            else:
+                all_frames = [df_cache] if not df_cache.empty else []
+
+                # 補過去缺口
+                if needs_past:
+                    fetch_past_start = target_start
+                    fetch_past_end = first_date if first_date else end_dt
+                    print(f"📡 [DATA] 偵測到過去數據缺口，開始分段補抓 ({fetch_past_start.date()} ~ {fetch_past_end.date()})...")
+                    curr_start = fetch_past_start
+                    while curr_start < fetch_past_end:
+                        curr_end = min(curr_start + timedelta(days=7), fetch_past_end)
+                        print(f"   📥 抓取區間(過去): {curr_start.strftime('%Y-%m-%d')} -> {curr_end.strftime('%Y-%m-%d')}...")
+                        for retry in range(3):
+                            try:
+                                print(f"[DEBUG] Step 9: Fetching kbars for {curr_start} to {curr_end}")
+                                kbars = self.api.kbars(contract, start=curr_start.strftime("%Y-%m-%d"), end=curr_end.strftime("%Y-%m-%d"))
+                                print(f"[DEBUG] Step 10: Fetched kbars, constructing DataFrame")
+                                if kbars and len(kbars.ts) > 0:
+                                    df_chunk = pd.DataFrame({**kbars})
+                                    df_chunk['ts'] = pd.to_datetime(df_chunk['ts'])
+                                    df_chunk.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume', 'Amount': 'amount'}, inplace=True)
+                                    all_frames.append(df_chunk)
+                                    break
+                                else:
+                                    print("      ℹ️ 此區間無資料")
+                                    break
+                            except Exception as e:
+                                wait_time = (retry + 1) * 5
+                                print(f"      ❌ 抓取異常 (嘗試 {retry+1}/3): {e}，等待 {wait_time} 秒後重試...")
+                                time.sleep(wait_time)
+                        curr_start = curr_end + timedelta(days=1)
+                        time.sleep(1.2) # 安全間隔
+
+                # 補未來缺口
+                if needs_future:
+                    fetch_future_start = last_date + timedelta(minutes=1) if last_date else target_start
+                    print(f"📡 [DATA] 偵測到未來數據缺口，開始分段補抓 ({fetch_future_start.date()} ~ {today.date()})...")
+                    curr_start = fetch_future_start
+                    while curr_start < today:
+                        curr_end = min(curr_start + timedelta(days=7), today)
+                        print(f"   📥 抓取區間(未來): {curr_start.strftime('%Y-%m-%d')} -> {curr_end.strftime('%Y-%m-%d')}...")
+                        for retry in range(3):
+                            try:
+                                kbars = self.api.kbars(contract, start=curr_start.strftime("%Y-%m-%d"), end=curr_end.strftime("%Y-%m-%d"))
+                                if kbars and len(kbars.ts) > 0:
+                                    df_chunk = pd.DataFrame({**kbars})
+                                    df_chunk['ts'] = pd.to_datetime(df_chunk['ts'])
+                                    df_chunk.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume', 'Amount': 'amount'}, inplace=True)
+                                    all_frames.append(df_chunk)
+                                    break
+                                else:
+                                    print("      ℹ️ 此區間無資料")
+                                    break
+                            except Exception as e:
+                                wait_time = (retry + 1) * 5
+                                print(f"      ❌ 抓取異常 (嘗試 {retry+1}/3): {e}，等待 {wait_time} 秒後重試...")
+                                time.sleep(wait_time)
+                        curr_start = curr_end + timedelta(days=1)
+                        time.sleep(1.2)
+
+                if all_frames:
+                    df_to_cache = pd.concat(all_frames, ignore_index=True).drop_duplicates(subset=['ts']).sort_values('ts').reset_index(drop=True)
+                    print(f"📊 歷史數據合併完成，總計 {len(df_to_cache)} 根 K 線")
+                    # 儲存基本欄位到快取
+                    try:
+                        df_to_cache.to_parquet(cache_file, compression='snappy')
+                    except Exception as cache_err:
+                        print(f"⚠️ 快取儲存失敗: {cache_err}")
+
+            if not all_frames:
                 print("❌ 警告：回傳數據為空，請檢查網路或 API 是否有資料")
                 return pd.DataFrame()
-
+                
+            df = pd.concat(all_frames, ignore_index=True).drop_duplicates(subset=['ts']).sort_values('ts').reset_index(drop=True)
+    
             # 3. 基礎日期與索引清理
             df['ts'] = pd.to_datetime(df['ts'])
             df = df.sort_values('ts').reset_index(drop=True) # 強制時間排序
-            df.rename(columns={'ts': 'date'}, inplace=True)
+            df.rename(columns={'ts': 'date', 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume', 'amount': 'Amount'}, inplace=True)
             # 檢查列名是否已經改了
             if 'date' not in df.columns:
                 print(f"DEBUG: 重新命名失敗，目前的欄位: {df.columns.tolist()}")
@@ -188,6 +293,40 @@ class DayTradingDataEngine:
                                 np.where((df['price_roc'] < 0) & (df['vol_surge_ratio'] < 0.8), 1, 0))
 
 
+            df['close_frac_diff'] = df['Close'].pct_change().fillna(0)  # 報酬率 (非絕對差值)
+            df['trend_wavelet'] = df['Close'].pct_change(5).fillna(0)   # 5 根 K 線的累積報酬率
+            df['noise_wavelet'] = (df['Close'].pct_change() - df['Close'].pct_change().rolling(5).mean()).fillna(0)  # 去趨勢後的噪聲
+
+            # --------------------------------------------------
+            # 🕰️ 週期性時間編碼 (Cyclical Time Encoding)
+            # --------------------------------------------------
+            minutes_of_day = df['date'].dt.hour * 60 + df['date'].dt.minute
+            df['time_sin'] = np.sin(2 * np.pi * minutes_of_day / 1440.0)
+            df['time_cos'] = np.cos(2 * np.pi * minutes_of_day / 1440.0)
+
+            # --------------------------------------------------
+            # 🌍 整合美股與日股全域特徵 (Global Features)
+            # --------------------------------------------------
+            # 這裡簡化實作，若您有 fetch_global_indices 的實作，可解除註解
+            # global_df = self.fetch_global_indices()
+            # if not global_df.empty: ...
+            # 此處提供一個防禦性填充，以防沒有該功能
+            df['nasdaq_prev_ret'] = 0.0
+            df['nikkei_premarket_momentum'] = 0.0
+            df['us_tw_gap_divergence'] = df['gap_amplitude'] - df['nasdaq_prev_ret']
+
+            # 半週期餘弦衰減
+            minutes_from_0845 = minutes_of_day - 525
+            is_day_session = (minutes_of_day >= 525) & (minutes_of_day <= 825)
+            cosine_decay = np.where(
+                (minutes_from_0845 >= 0) & (minutes_from_0845 <= 60),
+                np.cos((minutes_from_0845 / 60.0) * (np.pi / 2.0)),
+                0.0
+            )
+            final_weight = cosine_decay * is_day_session
+            df['us_tw_gap_divergence'] = df['us_tw_gap_divergence'] * final_weight
+            df['nikkei_premarket_momentum'] = df['nikkei_premarket_momentum'] * final_weight
+
             # 5. 清理與輸出
             # 刪除輔助計算的欄位，保留乾淨的 DataFrame
             cols_to_drop = ['vol_price', 'cum_vol_price', 'cum_vol', 'h_l', 'h_pc', 'l_pc', 'tr', 'sma20', 'std20', 'Amount']
@@ -227,13 +366,13 @@ class DayTradingDataEngine:
             today_str = datetime.now().strftime('%Y/%m/%d')
 
             for c in all_options:
-                if c.option_right.name == option_type:
+                if str(c.option_right).endswith(option_type):
                     delivery_date = getattr(c, 'delivery_date', None)
                     if delivery_date and delivery_date >= today_str:
                         valid_contracts_with_date.append(c)
 
             if not valid_contracts_with_date:
-                return self.api.Contracts.Futures.TXF.TXFR1
+                return None
 
             # 依據 delivery_date 排序，找出最近的到期日
             valid_contracts_with_date.sort(key=lambda x: x.delivery_date)
@@ -247,7 +386,7 @@ class DayTradingDataEngine:
             target_contracts = near_contracts[:30] # 擴大範圍至上下15檔
 
             if not target_contracts:
-                return self.api.Contracts.Futures.TXF.TXFR1
+                return None
 
             snaps = self.api.snapshots(target_contracts)
 
@@ -285,13 +424,27 @@ class DayTradingDataEngine:
         import io
         import requests
         import time
+        import os
         from datetime import datetime, timedelta
         from requests.adapters import HTTPAdapter
         from urllib3.util.retry import Retry
 
-        print(f"\n📡 開始抓取近 {days} 天籌碼...")
+        cache_file = os.path.join(os.path.dirname(__file__), "historical_chips_cache_v3.parquet")
+        
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
+
+        if os.path.exists(cache_file):
+            try:
+                df_cache = pd.read_parquet(cache_file)
+                # 簡單判定：如果最後一筆資料是最近兩天內，就直接用快取
+                if pd.to_datetime(df_cache['date']).max().date() >= (end_date - timedelta(days=2)).date():
+                    print(f"\n📦 載入本地籌碼快取，有效樣本數: {len(df_cache)}")
+                    return df_cache
+            except Exception as e:
+                print(f"⚠️ 籌碼快取讀取失敗: {e}")
+
+        print(f"\n📡 開始抓取近 {days} 天籌碼...")
 
         session = requests.Session()
         # 設定 Retry 機制：最多重試 5 次，且遇到 403, 500 等錯誤都會退避重試
@@ -327,6 +480,7 @@ class DayTradingDataEngine:
             # 針對未來時間模擬，執行年份平移以抓取真實歷史資料並映射回未來
             query_s_dt = s_date.replace(year=s_date.year - year_offset).strftime("%Y/%m/%d")
             query_e_dt = e_date.replace(year=e_date.year - year_offset).strftime("%Y/%m/%d")
+            print(f"  📥 抓取區間 (期交所+P/C): {query_s_dt} ~ {query_e_dt}...")
 
             try:
                 # 抓取 PC Ratio
@@ -475,10 +629,13 @@ class DayTradingDataEngine:
         df_final.fillna(0, inplace=True)
 
         # 過濾日期解析失敗的 NaT
-        df_final = df_final[df_final['date'].notna()]
-
-        print(f"✅ 籌碼抓取完成，清理後有效樣本數: {len(df_final)}")
-        return df_final.reset_index(drop=True)
+        df_daily_chips = df_final.ffill().dropna()
+        print(f"✅ 籌碼抓取完成，清理後有效樣本數: {len(df_daily_chips)}")
+        
+        # 保存快取
+        df_daily_chips.to_parquet(cache_file)
+        
+        return df_daily_chips.reset_index(drop=True)
 
     def integrate_institutional_chips(self, df_intraday, df_daily_chips):
         """

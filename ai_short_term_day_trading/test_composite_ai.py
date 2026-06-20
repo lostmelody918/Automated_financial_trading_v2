@@ -1,6 +1,6 @@
 import pytest
 import torch
-from composite_ai import CompositeDayTradingAI, CausalDayTradingAI
+from composite_ai import CompositeDayTradingAI, CausalMultiTimeframeAI
 
 def test_composite_ai_forward():
     batch_size = 4
@@ -24,22 +24,24 @@ def test_composite_ai_forward():
     # Check if outputs are finite
     assert torch.isfinite(logits).all()
 
-def test_causal_day_trading_ai_forward():
+def test_causal_multi_timeframe_ai_forward():
     batch_size = 4
-    seq_len = 10
+    seq_len_1m = 40
+    seq_len_15m = 20
     input_dim = 15
     
     # Initialize the causal model
-    model = CausalDayTradingAI(input_dim=input_dim, d_model=64, nhead=4, num_layers=2)
+    model = CausalMultiTimeframeAI(input_dim=input_dim, d_model=64, nhead=4, num_layers=2, seq_len_1m=seq_len_1m, seq_len_15m=seq_len_15m)
     model.eval()
     
     # Create random input tensors
-    x = torch.randn(batch_size, seq_len, input_dim)
+    x_1m = torch.randn(batch_size, seq_len_1m, input_dim)
+    x_15m = torch.randn(batch_size, seq_len_15m, input_dim)
     treatment_dir = torch.randn(batch_size, 1) # e.g. T=1, -1, or 0
     
     # Forward pass
     with torch.no_grad():
-        y0_logits, y1_logits = model(x, treatment_dir)
+        y0_logits, y1_logits, _ = model(x_1m, x_15m, treatment_dir)
         
     # Check output shapes
     assert y0_logits.shape == (batch_size, 7)

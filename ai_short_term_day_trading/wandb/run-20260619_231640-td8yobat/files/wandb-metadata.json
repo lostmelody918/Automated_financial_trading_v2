@@ -1,0 +1,40 @@
+{
+  "os": "Windows-10-10.0.19045-SP0",
+  "python": "CPython 3.13.1",
+  "startedAt": "2026-06-19T15:16:40.897169Z",
+  "program": "F:\\Gemini_CLI_Application\\finance_v3\\ai_short_term_day_trading\\train_model.py",
+  "codePath": "ai_short_term_day_trading\\train_model.py",
+  "codePathLocal": "train_model.py",
+  "git": {
+    "remote": "https://github.com/lostmelody918/Automated_financial_trading_v2.git",
+    "commit": "aa3b30131844edf42ee6d623daecc7796154b09d"
+  },
+  "email": "leave918@gmail.com",
+  "root": "F:\\Gemini_CLI_Application\\finance_v3\\ai_short_term_day_trading",
+  "host": "DESKTOP-VJCCT4O",
+  "executable": "F:\\Gemini_CLI_Application\\finance_v3\\venv\\Scripts\\python.exe",
+  "cpu_count": 8,
+  "cpu_count_logical": 16,
+  "gpu": "NVIDIA GeForce RTX 5070 Ti",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "2000396742656",
+      "used": "27306319872"
+    }
+  },
+  "memory": {
+    "total": "34260377600"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 5070 Ti",
+      "memoryTotal": "17094934528",
+      "cudaCores": 8960,
+      "architecture": "Blackwell",
+      "uuid": "GPU-f132860b-4315-5c0f-bb04-1e357b04965a"
+    }
+  ],
+  "cudaVersion": "13.2",
+  "writerId": "a1z3ago34ygu89473r5zgdklsp24w36a"
+}

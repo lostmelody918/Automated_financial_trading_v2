@@ -2,6 +2,8 @@ import os
 import shutil
 import pytest
 import pandas as pd
+pd.options.mode.string_storage = 'python' # Disable pyarrow to prevent Shioaji thread crash
+import pyarrow # Pre-load pyarrow to prevent access violation
 import numpy as np
 from datetime import datetime, timedelta
 from post_market_export import PostMarketExporter

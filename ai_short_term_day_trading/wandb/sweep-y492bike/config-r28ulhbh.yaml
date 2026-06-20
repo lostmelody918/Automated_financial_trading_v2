@@ -1,0 +1,14 @@
+wandb_version: 1
+
+d_model:
+  value: 256
+dropout:
+  value: 0.4515975685271342
+lr:
+  value: 0.0006178031865195922
+nhead:
+  value: 4
+num_layers:
+  value: 3
+weight_decay:
+  value: 0.001

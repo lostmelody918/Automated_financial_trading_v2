@@ -39,6 +39,9 @@ def calculate_bs_greeks(S, K, T, r, iv, option_type="Call"):
     if T <= 0 or iv <= 0:
         return 0.5 if option_type == "Call" else -0.5, 0.0, 0.0, S if option_type == "Call" else 0.0
 
+    if K <= 0.0:
+        K = 1e-9
+
     d1 = (np.log(S / K) + (r + 0.5 * iv ** 2) * T) / (iv * np.sqrt(T))
     d2 = d1 - iv * np.sqrt(T)
 
