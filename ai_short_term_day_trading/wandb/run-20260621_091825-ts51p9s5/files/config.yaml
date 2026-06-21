@@ -1,0 +1,66 @@
+_wandb:
+    value:
+        cli_version: 0.27.2
+        e:
+            pfgguzplwojs6rn233v33rwgimp5igxz:
+                codePath: ai_short_term_day_trading\train_model.py
+                codePathLocal: train_model.py
+                cpu_count: 8
+                cpu_count_logical: 16
+                cudaVersion: "13.2"
+                disk:
+                    /:
+                        total: "2000396742656"
+                        used: "27752673280"
+                email: leave918@gmail.com
+                executable: F:\Gemini_CLI_Application\finance_v3\venv\Scripts\python.exe
+                git:
+                    commit: 7d53370e5495672c488d2d8b4cb4a297e01fb199
+                    remote: https://github.com/lostmelody918/Automated_financial_trading_v2.git
+                gpu: NVIDIA GeForce RTX 5070 Ti
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Blackwell
+                      cudaCores: 8960
+                      memoryTotal: "17094934528"
+                      name: NVIDIA GeForce RTX 5070 Ti
+                      uuid: GPU-f132860b-4315-5c0f-bb04-1e357b04965a
+                host: DESKTOP-VJCCT4O
+                memory:
+                    total: "34260377600"
+                os: Windows-10-10.0.19045-SP0
+                program: F:\Gemini_CLI_Application\finance_v3\ai_short_term_day_trading\train_model.py
+                python: CPython 3.13.1
+                root: F:\Gemini_CLI_Application\finance_v3\ai_short_term_day_trading
+                startedAt: "2026-06-21T01:18:25.944790Z"
+                writerId: pfgguzplwojs6rn233v33rwgimp5igxz
+        m: []
+        python_version: 3.13.1
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "3":
+                - 2
+                - 16
+            "4": 3.13.1
+            "5": 0.27.2
+            "8":
+                - 3
+            "12": 0.27.2
+            "13": windows-amd64
+batch_size:
+    value: 512
+d_model:
+    value: 128
+dropout:
+    value: 0.4
+epochs:
+    value: 150
+lr:
+    value: 0.0005
+nhead:
+    value: 4
+num_layers:
+    value: 2

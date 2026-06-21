@@ -90,7 +90,7 @@ class CausalMultiTimeframeAI(nn.Module):
         self.cross_attn = nn.MultiheadAttention(embed_dim=d_model, num_heads=nhead, dropout=dropout, batch_first=True)
         self.ln_cross = nn.LayerNorm(d_model)
         self.dropout_cross = nn.Dropout(dropout)
-        
+
         # 動態閘道：依據微觀特徵決定是否接受宏觀環境的建議
         self.gate_proj = nn.Linear(d_model, d_model)
 
@@ -108,7 +108,7 @@ class CausalMultiTimeframeAI(nn.Module):
 
     def forward(self, x_1m, x_15m, treatment_dir):
         device = x_1m.device
-        
+
         # 生成時間衰減 Mask
         mask_1m = get_time_decay_mask(x_1m.size(1), device)
         mask_15m = get_time_decay_mask(x_15m.size(1), device)
@@ -132,10 +132,10 @@ class CausalMultiTimeframeAI(nn.Module):
         # --- Dynamic Contextual Fusion (Cross-Attention + Gated Fusion) ---
         # 由於 Cross-Attention 中 key sequence 長度是 15m，我們不用 target mask 影響它，僅靠 encoder 的處理
         attn_out, _ = self.cross_attn(query=x1_encoded, key=x15_encoded, value=x15_encoded)
-        
+
         # 計算動態閘道 (Sigmoid 激勵)
         gate = torch.sigmoid(self.gate_proj(x1_encoded))
-        
+
         # 閘道融合 (GLU)
         x1_fused = self.ln_cross(x1_encoded + gate * self.dropout_cross(attn_out))
 
@@ -147,11 +147,11 @@ class CausalMultiTimeframeAI(nn.Module):
         shared_rep = self.dropout_shared(F.relu(self.fc_shared(combined)))
 
         # 傾向分數預測
-        prop_logit = self.propensity_head(shared_rep)
+        prop_logit = self.propensity_head(shared_rep.detach()) # 傾向分數 head 不反向傳播到共享表徵
 
         # 反事實分支
         y0_logits = self.outcome_head_0(shared_rep)
         rep_with_dir = torch.cat([shared_rep, treatment_dir], dim=-1)
         y1_logits = self.outcome_head_1(rep_with_dir)
 
-        return y0_logits, y1_logits, prop_logit
+        return y0_logits, y1_logits, prop_logit, shared_rep

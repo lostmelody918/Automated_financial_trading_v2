@@ -297,6 +297,59 @@ class DayTradingDataEngine:
             df['trend_wavelet'] = df['Close'].pct_change(5).fillna(0)   # 5 根 K 線的累積報酬率
             df['noise_wavelet'] = (df['Close'].pct_change() - df['Close'].pct_change().rolling(5).mean()).fillna(0)  # 去趨勢後的噪聲
 
+            # DEMA 與 TEMA 計算 (極致平滑且消除延遲)
+            ema9 = df['Close'].ewm(span=9, adjust=False).mean()
+            ema_of_ema9 = ema9.ewm(span=9, adjust=False).mean()
+            df['dema_9'] = 2 * ema9 - ema_of_ema9
+            ema_of_ema_of_ema9 = ema_of_ema9.ewm(span=9, adjust=False).mean()
+            df['tema_9'] = 3 * ema9 - 3 * ema_of_ema9 + ema_of_ema_of_ema9
+            # 反曲點判斷改用 TEMA
+            df['is_peak'] = ((df['tema_9'].shift(1) > df['tema_9'].shift(2)) & (df['tema_9'].shift(1) > df['tema_9'])).astype(int)
+            df['is_trough'] = ((df['tema_9'].shift(1) < df['tema_9'].shift(2)) & (df['tema_9'].shift(1) < df['tema_9'])).astype(int)
+
+            # KAMA (考夫曼自適應移動平均)
+            period = 10
+            fast_alpha = 2 / (2 + 1)
+            slow_alpha = 2 / (30 + 1)
+            change = abs(df['Close'] - df['Close'].shift(period))
+            volatility = abs(df['Close'] - df['Close'].shift(1)).rolling(period).sum()
+            er = change / (volatility + 1e-9)
+            sc = (er * (fast_alpha - slow_alpha) + slow_alpha) ** 2
+            
+            # 使用 numpy 迴圈計算以提升效能 (取代緩慢的 iterrows 或 .loc)
+            close_arr = df['Close'].values
+            sc_arr = sc.values
+            kama = np.copy(close_arr)
+            for i in range(period, len(close_arr)):
+                # 如果遇到 NaN (例如前面的平滑尚未就緒)，退回前一個值或自身
+                if np.isnan(sc_arr[i]):
+                    continue
+                kama[i] = kama[i-1] + sc_arr[i] * (close_arr[i] - kama[i-1])
+            df['kama_10'] = kama
+
+            # 針對量能 (Volume) 進行 Median Filter 濾除胖手指與極端爆量，保留原始 mock_volume
+            df['mock_volume_median'] = df['mock_volume'].rolling(window=5).median().fillna(df['mock_volume'])
+
+            # 針對 vwap_bias 實作基於波動率的自適應過濾器 (Volatility-Adaptive EMA)
+            bias_fast = df['vwap_bias'].ewm(span=3, adjust=False).mean()
+            bias_slow = df['vwap_bias'].ewm(span=15, adjust=False).mean()
+            local_vol = df['vwap_bias'].rolling(10).std().fillna(0)
+            vol_min = local_vol.rolling(60).min()
+            vol_max = local_vol.rolling(60).max()
+            w_t = (local_vol - vol_min) / (vol_max - vol_min + 1e-9)
+            w_t = w_t.fillna(0.5).clip(0, 1)
+            df['vwap_bias_adaptive'] = w_t * bias_fast + (1 - w_t) * bias_slow
+
+            # 針對 rsi_fast 實作 Median Filter + EMA 濾除椒鹽雜訊
+            rsi_median = df['rsi_fast'].rolling(window=3).median().fillna(df['rsi_fast'])
+            df['rsi_fast_adaptive'] = rsi_median.ewm(span=3, adjust=False).mean()
+
+            # 針對其他高頻抖動的技術指標，進行二次 EMA 平滑 (Feature Smoothing)，並保留原始值
+            features_to_smooth = ['slope_vwap', 'slope_ma20', 'gap_amplitude']
+            for col in features_to_smooth:
+                if col in df.columns:
+                    df[f'{col}_smoothed'] = df[col].ewm(span=3, adjust=False).mean()
+
             # --------------------------------------------------
             # 🕰️ 週期性時間編碼 (Cyclical Time Encoding)
             # --------------------------------------------------
